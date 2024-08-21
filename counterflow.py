@@ -19,8 +19,10 @@ OX_SHROUDS = ["Nitrogen", "Helium"]
 M = {
     "air": 28.97e-03,
     "ethylene": 28.05e-03,
+    "hydrogen": 1.00e-03,
     "nitrogen": 28.00e-03,
     "oxygen": 32.00e-03,
+    "helium": 4.00e-03,
 }
 WIN_X = 600
 WIN_Y = 800
