@@ -90,11 +90,7 @@ def run_gui():
     outputs.append(add_field(shroud_frame, "readonly", "Oxidizer Side:", "SLPM", 0, 0))
     outputs.append(add_field(shroud_frame, "readonly", "Fuel Side:", "SLPM", 1, 0))
 
-    calculate_button = tk.Button(
-        root,
-        text="Calculate",
-        command=lambda: generate_output(inputs, outputs),
-    )
+    calculate_button = tk.Button(root, text="Calculate", command=lambda: generate_output(inputs, outputs))
     calculate_button.grid(row=12, column=0, sticky="ns")
 
     load_cached_inputs(inputs)
@@ -138,7 +134,7 @@ def add_dropdown(parent, label, default_option, options, gr, gc):
 
 def cache_inputs(data):
     with open("counterflow.json", "w") as f:
-        json.dump(data, f)
+        json.dump(data, f, indent=4)
 
 
 def load_cached_inputs(inputs):
@@ -218,7 +214,16 @@ def generate_output(inputs, outputs):
 
 
 def run_console():
-    pass
+    if os.path.exists("counterflow.json"):
+        with open("counterflow.json", "r") as f:
+            inp = json.load(f)
+    else:
+        print("ERROR: No input file found! Please provide a counterflow.json file.")
+
+    out = calculate_slpm(inp)
+
+    pretty_out = json.dumps(out, indent=4)
+    print(pretty_out)
 
 
 def calculate_slpm(inp):
@@ -242,9 +247,7 @@ def calculate_slpm(inp):
     out["SLPM_ox_diluent"] = vdot_to_slpm(vdot_ox_diluent, inp["p"] * ATM_TO_PA, inp["T"])
 
     # Fuel side
-    M_ox_total = (
-        inp["X_ox"] * M[inp["oxidizer"].lower()] + (1 - inp["X_ox"]) * M[inp["oxidizer_diluent"].lower()]
-    )
+    M_ox_total = inp["X_ox"] * M[inp["oxidizer"].lower()] + (1 - inp["X_ox"]) * M[inp["oxidizer_diluent"].lower()]
     M_f_total = inp["X_f"] * M[inp["fuel"].lower()] + (1 - inp["X_f"]) * M[inp["fuel_diluent"].lower()]
     rho_f_total = inp["p"] * ATM_TO_PA * M_f_total / R_U / inp["T"]
     rho_ox_total = inp["p"] * ATM_TO_PA * M_ox_total / R_U / inp["T"]
