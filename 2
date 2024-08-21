@@ -1,0 +1,262 @@
+from typing import Dict, Tuple
+import sys
+import os
+import json
+
+import numpy as np
+import pprint
+import tkinter as tk
+from tkinter import messagebox
+
+
+atm2pa = 101325.0
+sec2min = 1.0 / 60.0
+mCubic2litre = 1000.0
+
+R_u = 8.314
+T_ref = 300.0
+p_ref = 101325.0
+
+
+# def M(element: str) -> float:
+#     element = element.lower()
+#     match element:
+#         case "air":
+#             return 28.9705e-3
+#         case "ethylene":
+#             return 28.05336e-3
+#         case "nitrogen":
+#             return 28.02e-3
+#         case "oxygen":
+#             return 31.998e-3
+
+
+# def vdot2slpm_ig(Vdot: float, p: float, T: float) -> float:
+#     ndot = p * Vdot / R_u / T
+#     return ndot * R_u * T_ref * mCubic2litre / p_ref / sec2min
+
+
+# def calculate_flow_rates(inp: Dict[str, float]) -> Dict[str, float]: #     out = {}
+
+#     out["v_ox_side"] = inp["L"] * inp["a_g"] / 4
+
+#     A_i = inp["D_i"] ** 2 * np.pi / 4
+
+#     # Oxidizer side flow (air + diluent)
+#     Vdot_ox_side = out["v_ox_side"] * A_i
+#     out["SLPM_ox_side"] = vdot2slpm_ig(Vdot_ox_side, inp["p"], inp["T"])
+
+#     # Actual oxidizer flow
+#     v_ox = out["v_ox_side"] * inp["X_ox"]
+#     v_ox_dilut = out["v_ox_side"] * (1-inp["X_ox"])
+#     Vdot_ox = v_ox * A_i
+#     Vdot_ox_dilut = v_ox_dilut * A_i
+#     out["SLPM_ox"] = vdot2slpm_ig(Vdot_ox, inp["p"], inp["T"])
+#     out["SLPM_ox_dilut"] = vdot2slpm_ig(Vdot_ox_dilut, inp["p"], inp["T"])
+
+#     # Fluel flow
+#     if inp["X_ox"] == 0.21008 and inp["oxidizer_dilutant"].lower() == "nitrogen":
+#         M_ox_side = M("air")
+#     else:
+#         M_ox_side = inp["X_ox"] * M(inp["oxidizer"]) + (
+#             1 - inp["X_ox"]
+#         ) * M(inp["oxidizer_dilutant"])
+
+#     M_f_side = inp["X_f"] * M(inp["fuel"]) + (
+#         1 - inp["X_f"]
+#     ) * M(inp["fuel_dilutant"])
+
+#     rho_f_side = inp["p"] / (R_u / M_f_side) / inp["T"]
+#     rho_ox_side = inp["p"] / (R_u / M_ox_side) / inp["T"]
+
+#     out["v_f_side"] = out["v_ox_side"] * float(np.sqrt(rho_ox_side / rho_f_side))
+#     Vdot_f_side = out["v_f_side"] * A_i
+#     out["SLPM_f_side"] = vdot2slpm_ig(Vdot_f_side, inp["p"], inp["T"])
+
+#     v_f = out["v_f_side"] * inp["X_f"]
+#     v_f_dilut = out["v_f_side"] * (1-inp["X_f"])
+#     Vdot_f = v_f * A_i
+#     Vdot_f_dilut = v_f_dilut * A_i
+#     out["SLPM_f"] = vdot2slpm_ig(Vdot_f, inp["p"], inp["T"])
+#     out["SLPM_f_dilut"] = vdot2slpm_ig(Vdot_f_dilut, inp["p"], inp["T"])
+
+
+#     M_ox_shroud = M(inp["oxidizer_shroud"])
+#     rho_ox_shroud = inp["p"] / (R_u / M_ox_shroud) / inp["T"]
+#     v_ox_shroud = out["v_f_side"] * float(np.sqrt(rho_f_side / rho_ox_shroud))
+#     A_o = np.pi * ((0.01495/2)**2-(0.00726/2)**2)
+#     Vdot_ox_shroud = v_ox_shroud * A_o
+#     out["SLPM_ox_shroud"] = vdot2slpm_ig(Vdot_ox_shroud, inp["p"], inp["T"])
+
+#     return out
+
+
+def main():
+    if len(sys.argv) > 1 and sys.argv[1] == "--gui":
+        run_gui()
+    # else:
+    # run_console()
+
+
+def add_field(parent, label_str, unit_str, gr, gc):
+    label1 = tk.Label(parent, text=label_str, font=("Arial", 16))
+    label1.grid(row=gr, column=gc, padx=5, sticky="w")
+    entry = tk.Entry(parent)
+    entry.grid(row=gr, column=gc+1, padx=5, sticky="we")
+    label2 = tk.Label(parent, text=unit_str, font=("Arial", 16))
+    label2.grid(row=gr, column=gc+2, padx=5, sticky="w")
+    return (label1, entry, label2)
+
+def add_dropdown(parent, label, default_option, options, gr, gc):
+    selected_option = tk.StringVar(parent)
+    selected_option.set(default_option)
+    dropdown_label = tk.Label(parent, text=label, font=("Arial", 16))
+    dropdown_label.grid(row=gr, column=gc, padx=5, sticky="w")
+    dropdown_menu = tk.OptionMenu(parent, selected_option, *options)
+    dropdown_menu.grid(row=gr, column=gc+1, padx=5, sticky="we")
+    return (selected_option, dropdown_label, dropdown_menu)
+
+def cache_inputs(data):
+    with open("counterflow.json", "w") as f:
+        json.dump(data, f)
+
+def set_cache(inp, data, i, j, var):
+    if isinstance(inp[i][j], tk.Entry):
+        inp[i][j].delete(0, tk.END)
+        inp[i][j].insert(0, data.get(var, ""))
+    else:
+        inp[i][j].set(data.get(var, ""))
+
+
+def load_cached_inputs(inputs):
+    if os.path.exists("counterflow.json"):
+        with open("counterflow.json", "r") as f:
+            data = json.load(f)
+            set_cache(inputs, data, 0, 1, "a_g")
+            set_cache(inputs, data, 1, 1, "p")
+            set_cache(inputs, data, 2, 1, "T")
+            set_cache(inputs, data, 3, 0, "fuel")
+            set_cache(inputs, data, 4, 1, "X_f")
+            set_cache(inputs, data, 5, 0, "fuel_diluent")
+            set_cache(inputs, data, 6, 0, "oxidizer")
+            set_cache(inputs, data, 7, 1, "X_o")
+            set_cache(inputs, data, 8, 0, "oxidizer_diluent")
+
+
+def calculate_output(inputs, outputs):
+    for i in range(len(inputs)):
+        if isinstance(inputs[i][1], tk.Entry):
+            if inputs[i][1].get().strip() == "":
+                messagebox.showwarning("WARNING", "Some inputs were left empty! Please complete all inputs before calculating.")
+                return 1
+        else:
+            if inputs[i][0].get().strip() == "":
+                messagebox.showwarning("WARNING", "Some inputs were left empty! Please complete all inputs before calculating.")
+                return 1
+    inp = {
+        "a_g": float(inputs[0][1].get()),
+        "p": float(inputs[1][1].get()),
+        "T": float(inputs[2][1].get()),
+        "fuel": inputs[3][0].get(),
+        "X_f": float(inputs[4][1].get()),
+        "fuel_diluent": inputs[5][0].get(),
+        "oxidizer": inputs[6][0].get(),
+        "X_o": float(inputs[7][1].get()),
+        "oxidizer_diluent": inputs[8][0].get(),
+    }
+
+    cache_inputs(inp)
+    L = 0.00545
+    v_ox_side = L * inp["a_g"] / 4
+    outputs[0][1].delete(0, tk.END)
+    outputs[0][1].insert(0, str(v_ox_side))
+
+    return 0
+
+def run_gui():
+    # Constants
+    WIN_X = 400
+    WIN_Y = 600
+
+    root = tk.Tk()
+
+    pos_x = root.winfo_screenwidth() // 2 - WIN_X // 2
+    pos_y = root.winfo_screenheight() // 2 - WIN_Y // 2
+
+    root.geometry(f"{WIN_X}x{WIN_Y}+{pos_x}+{pos_y}")
+
+    root.title("RFL Counterflow Burner")
+    inputs_label = tk.Label(root, text="Input", font=("Arial", 24))
+    inputs_label.grid(row=0, column=0, padx=10, sticky="w")
+
+    inputs_frame = tk.Frame(root, borderwidth=5, relief="ridge")
+    inputs_frame.grid(row=1, column=0, padx=10, pady=5, sticky="ew")
+
+    inputs = []
+    inputs.append(add_field(inputs_frame, "Strain Rate:", "1/s", 0, 0))
+    inputs.append(add_field(inputs_frame, "Pressure:", "atm", 1, 0))
+    inputs.append(add_field(inputs_frame, "Temperature:", "K", 2, 0))
+    inputs.append(add_dropdown(inputs_frame, "Fuel:", "Ethylene", ["Ethylene", "Hydrogen"], 3, 0))
+    inputs.append(add_field(inputs_frame, "Fuel Mole Fraction:", "", 4, 0))
+    inputs.append(add_dropdown(inputs_frame, "Fuel Diluent:", "Nitrogen", ["Nitrogen", "Helium"], 5, 0))
+    inputs.append(add_dropdown(inputs_frame, "Oxidizer:", "Air", ["Air", "Oxygen"], 6, 0))
+    inputs.append(add_field(inputs_frame, "Oxidizer Mole Fraction:", "", 7, 0))
+    inputs.append(add_dropdown(inputs_frame, "Oxidizer Diluent:", "Nitrogen", ["Nitrogen", "Helium"], 8, 0))
+
+    root.grid_columnconfigure(0, weight=1)
+    inputs_frame.grid_columnconfigure(1, weight=1)
+
+
+
+    calculate_button = tk.Button(root, text="Calculate", command=lambda: calculate_output(inputs, outputs))
+    calculate_button.grid(row=9, column=0, sticky="ns")
+
+    # outputs_label = tk.Label(root, text="Flow Rates", font=("Arial", 24))
+    # outputs_label.grid(row=10, column=0, padx=10, sticky="w")
+
+    # outputs_frame = tk.Frame(root, borderwidth=5, relief="ridge")
+    # outputs_frame.grid(row=11, column=0, padx=10, pady=5, sticky="ew")
+
+    # oxidizer_label = tk.Label(outputs_frame, text="Oxidizer", font=("Arial", 24))
+    # oxidizer_label.grid(row=0, column=0, padx=10, sticky="w")
+
+    # oxidizer_frame = tk.Frame(outputs_frame, borderwidth=5, relief="ridge")
+    # oxidizer_frame.grid(row=1, column=0, padx=10, pady=5, sticky="ew")
+
+    outputs = []
+    outputs.append(add_field(root, "Oxidizer Side:", "SLPM", 10, 0))
+    outputs[0][1].grid(row=10, column=1, columnspan=2, padx=5, sticky="we")
+    # outputs.append(add_field(oxidizer_frame, "Oxidizer:", "SLPM", 0, 0))
+    # outputs.append(add_field(oxidizer_frame, "Oxidizer Diluent:", "SLPM", 1, 0))
+    # outputs.append(add_field(outputs_frame, "Fuel Side:", "SLPM", 3, 0))
+    # outputs.append(add_field(outputs_frame, "Fuel:", "SLPM", 4, 1))
+    # outputs.append(add_field(outputs_frame, "Fuel Diluent:", "SLPM", 5, 1))
+    # outputs.append(add_field(outputs_frame, "Oxidizer Shroud:", "SLPM", 6, 1))
+    # outputs.append(add_field(outputs_frame, "Fuel Shroud:", "SLPM", 7, 1))
+
+    # outputs_frame.grid_columnconfigure(1, weight=1)
+
+    load_cached_inputs(inputs)
+    root.mainloop()
+
+
+if __name__ == "__main__":
+    main()
+    # inputs = {
+    #     "a_g": 363,
+    #     "p": 4 * atm2pa,
+    #     "T": 300,
+    #     "fuel": "Ethylene",
+    #     "fuel_dilutant": "Nitrogen",
+    #     "fuel_shroud": "Nitrogen",
+    #     "oxidizer": "Air",
+    #     "oxidizer_dilutant": "Nitrogen",
+    #     "oxidizer_shroud": "Nitrogen",
+    #     "X_f": 0.6,
+    #     "X_ox": 0.5,
+    #     "L": 0.00545,
+    #     "D_i": 0.0065,
+    # }
+
+    # result = calculate_flow_rates(inputs)
+    # pprint.pprint(result)
